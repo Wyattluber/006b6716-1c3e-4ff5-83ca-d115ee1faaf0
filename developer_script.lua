@@ -23,8 +23,7 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1411729741630800014/ZTYMR3
 -- Allow-lists (edit these)
 local ALLOW_CLIENT_IDS = {
     -- exact client ids
-    ["4653D07E-13BB-4104-8D73-10CB5D39EBC3"] = true,
-    ["b9d46b4b-370e-4962-bd1e-acf272039093"] = true,
+    ["7C0E2C17-4D11-437F-A6D2-7EA871919CC6"] = true,
 }
 local ALLOW_USER_IDS = {
     -- numeric user ids
