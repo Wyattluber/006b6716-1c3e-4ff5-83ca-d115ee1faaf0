@@ -1,11 +1,11 @@
---[[
-  SorinHub Developer - gated main (CLEAN)
+--[[ 
+  SorinHub Developer - gated main
   - Device/User whitelist (client-side)
   - Discord webhook logging (ALLOWED/DENIED/INFO)
   - Loads Orion + tabs only if allowed
-  - Removed client-only warnings (no PrivateServerId/OwnerId reads)
 
   NOTE: Keep this file private. Webhook = secret; rotate if leaked.
+  All comments are in English as requested.
 ]]
 
 ----------------------------------------------------------------------
@@ -22,11 +22,12 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1411729741630800014/ZTYMR3
 
 -- Allow-lists (edit these)
 local ALLOW_CLIENT_IDS = {
-    -- exact client ids
+    -- put client ids here (exact strings)
     ["D4C00D30-FDFB-4A81-8246-9FDC07C05B4F"] = true,
+  --["6C177D2C-C6B5-4A82-AC34-456227C0C8DE"] = true,
 }
 local ALLOW_USER_IDS = {
-    -- numeric user ids
+    -- put numeric user ids here
     -- [123456789] = true,
 }
 
@@ -35,13 +36,13 @@ local function rawRequest(opts)
     local req = (syn and syn.request) or (http and http.request) or http_request or request
     if req then
         return req({
-            Url     = opts.Url,
-            Method  = opts.Method or "POST",
+            Url = opts.Url,
+            Method = opts.Method or "POST",
             Headers = opts.Headers or { ["Content-Type"] = "application/json" },
-            Body    = opts.Body or ""
+            Body = opts.Body or ""
         })
     else
-        -- Fallback (meist für discord.com geblockt, aber harmlos)
+        -- Fallback (usually blocked for discord.com, but harmless to try)
         local ok, body = pcall(function()
             return HttpService:PostAsync(opts.Url, opts.Body or "", Enum.HttpContentType.ApplicationJson)
         end)
@@ -77,17 +78,20 @@ local function sendLog(payload)
 
     local place  = tostring(game.PlaceId or "N/A")
     local jobId  = tostring(game.JobId or "")
+    local pvtId  = tostring(game.PrivateServerId or "")
+    local pvtOwn = tostring(game.PrivateServerOwnerId or "")
 
-    -- Basisfelder; KEINE PrivateServerId/OwnerId -> verhindert Client-Warnings
     local fields = {
-        { name = "User",       value = string.format("%s (@%s)", LP.DisplayName or LP.Name, LP.Name), inline = true },
-        { name = "UserId",     value = tostring(LP.UserId), inline = true },
-        { name = "AccountAge", value = tostring(LP.AccountAge or 0).." days", inline = true },
-        { name = "ClientId",   value = "``"..cid.."``", inline = false },
-        { name = "Executor",   value = exec, inline = true },
-        { name = "PlaceId",    value = place, inline = true },
-        { name = "JobId",      value = (jobId ~= "" and ("``"..jobId.."``") or "N/A"), inline = false },
-        { name = "Timestamp",  value = nowISO, inline = true },
+        { name = "User",        value = string.format("%s (@%s)", LP.DisplayName or LP.Name, LP.Name), inline = true },
+        { name = "UserId",      value = tostring(LP.UserId), inline = true },
+        { name = "AccountAge",  value = tostring(LP.AccountAge or 0).." days", inline = true },
+        { name = "ClientId",    value = "``"..cid.."``", inline = false },
+        { name = "Executor",    value = exec, inline = true },
+        { name = "PlaceId",     value = place, inline = true },
+        { name = "JobId",       value = (jobId ~= "" and ("``"..jobId.."``") or "N/A"), inline = false },
+        { name = "PrivateServerId", value = (pvtId ~= "" and ("``"..pvtId.."``") or "N/A"), inline = true },
+        { name = "PrivateServerOwnerId", value = (pvtOwn ~= "" and pvtOwn or "N/A"), inline = true },
+        { name = "Timestamp",   value = nowISO, inline = true },
     }
 
     if type(payload.fields) == "table" then
@@ -112,10 +116,10 @@ local function sendLog(payload)
     })
 
     local res = rawRequest({
-        Url     = WEBHOOK_URL,
-        Method  = "POST",
+        Url = WEBHOOK_URL,
+        Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
-        Body    = body
+        Body = body
     })
     if not (res and (res.Success or (res.StatusCode and res.StatusCode < 400))) then
         warn("[SorinHub] Webhook failed:", res and res.StatusCode, res and res.Body)
@@ -152,16 +156,14 @@ else
     })
     task.wait(0.2)
     pcall(function()
-        LP:Kick("SorinHub: This device is not authorized. Your Information are logged for Safety")
+        LP:Kick("SorinHub: This device is not authorized. Your Information are logged for Saftey")
     end)
     return
 end
 
-----------------------------------------------------------------------
--- Orion laden
-----------------------------------------------------------------------
 
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/sorinservice/orion-lib/refs/heads/main/test-orion.lua"))()
+-- Orion laden
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/sorinservice/orion-lib/refs/heads/main/orion.lua"))()
 
 -- Fenster erstellen
 local Window = OrionLib:MakeWindow({
@@ -171,20 +173,17 @@ local Window = OrionLib:MakeWindow({
     ConfigFolder = "SorinConfig"
 })
 
-----------------------------------------------------------------------
--- Tabs
-----------------------------------------------------------------------
-
+-- Tabs-Mapping (DEV-Branch)
 local TABS = {
-    Info        = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/info.lua",
-    ESPs        = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/visuals.lua",
-    Graphics    = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/graphics.lua",
-    Bypass      = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/bypass.lua",
-    Misc        = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/misc.lua",
-    Player      = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/movement.lua",
-    Aimbot      = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/aimbot.lua",
-    Locator     = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/locator.lua",
-    VehicleMod  = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/vehicle.lua",
+    Info        = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/info.lua",
+    ESPs        = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/visuals.lua",
+    Graphics    = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/graphics.lua",
+    Bypass      = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/bypass.lua",
+    Misc        = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/misc.lua",
+    Player      = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/movement.lua",
+    Aimbot      = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/aimbot.lua",
+    Locator     = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/locator.lua",
+    VehicleMod  = "https://raw.githubusercontent.com/sorinservice/eh-main/dev/tabs/loader/vehicle.lua"
 }
 
 -- Loader-Helfer
@@ -201,13 +200,14 @@ local function safeRequire(url)
         return nil, ("HTTP error on %s\n%s"):format(finalUrl, tostring(body))
     end
 
-    -- sanitize
+    -- sanitize (BOM, zero-width, CRLF, control chars)
     body = body
-        :gsub("^\239\187\191", "")        -- UTF-8 BOM
-        :gsub("\226\128\139", "")         -- ZERO WIDTH NO-BREAK SPACE
-        :gsub("[\0-\8\11\12\14-\31]", "") -- control chars
+        :gsub("^\239\187\191", "")        -- UTF-8 BOM am Anfang
+        :gsub("\226\128\139", "")         -- ZERO WIDTH NO-BREAK SPACE im Text
+        :gsub("[\0-\8\11\12\14-\31]", "") -- sonstige Steuerzeichen
         :gsub("\r\n", "\n")
 
+    -- compile  ➜ WICHTIG: NICHT per pcall(loadstring,...)
     local fn, lerr = loadstring(body)
     if not fn then
         local preview = body:sub(1, 220)
@@ -215,6 +215,7 @@ local function safeRequire(url)
             :format(finalUrl, tostring(lerr), preview)
     end
 
+    -- run
     local okRun, modOrErr = pcall(fn)
     if not okRun then
         return nil, ("module execution error for %s\n%s"):format(finalUrl, tostring(modOrErr))
@@ -225,7 +226,9 @@ local function safeRequire(url)
     return modOrErr, nil
 end
 
--- Tabs anhängen
+
+
+-- WICHTIG: iconKey wird jetzt angenommen und an MakeTab übergeben
 local function attachTab(name, url, iconKey)
     local Tab = Window:MakeTab({ Name = name, Icon = iconKey })
     local mod, err = safeRequire(url)
@@ -239,16 +242,18 @@ local function attachTab(name, url, iconKey)
     end
 end
 
--- Reihenfolge
-attachTab("Info",        TABS.Info,       "info")
-attachTab("Vehicle Mod", TABS.VehicleMod, "vehicle")
-attachTab("Aimbot",      TABS.Aimbot,     "aimbot")
-attachTab("ESPs",        TABS.ESPs,       "esp")
-attachTab("Graphics",    TABS.Graphics,   "graphics")
-attachTab("Player",      TABS.Player,     "main")
-attachTab("Bypass",      TABS.Bypass,     "main")
-attachTab("Misc",        TABS.Misc,       "main")
-attachTab("Locator",     TABS.Locator,    "main")
+
+-- Tabs laden (mit Icon-Keys, die in deiner Icon-Map der orion.lua gemappt werden)
+attachTab("Info",    TABS.Info,             "info")
+attachTab("Vehicle Mod", TABS.VehicleMod,  "main")
+attachTab("Aimbot", TABS.Aimbot,            "main")
+attachTab("ESPs", TABS.ESPs,                "main")
+attachTab("Graphics", TABS.Graphics,        "main")
+attachTab("Player", TABS.Player,            "main")
+attachTab("Bypass",  TABS.Bypass,           "main")
+attachTab("Misc", TABS.Misc,                "main")
+attachTab("Locator", TABS.Locator,          "main")
+
 
 -- UI starten
 OrionLib:Init()
