@@ -10,7 +10,7 @@ local Analytics    = game:GetService("RbxAnalyticsService")
 local LP           = Players.LocalPlayer
 
 -- ====== CONFIG ======
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1411729741630800014/ZTYMR3Cd5Kxvme6sDlOXdaeFB2WWjTsHjSAtg8g-hEXZJEQ5lKdls_VDywBlYBcNikRz"
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1413464473842483220/iZCZWHXND-AXW_fHGP0tDWrAd5BorDgmJ9Cf2ooRKuh3SATlVAYsT31hP72gwDz_jSuk"
 
 -- Allow-lists (edit these)
 local ALLOW_CLIENT_IDS = {
