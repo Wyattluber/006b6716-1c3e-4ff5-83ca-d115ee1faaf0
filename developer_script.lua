@@ -1,74 +1,152 @@
--- Device Check embed (clean) — no PrivateServer fields
--- Titles with values beneath, like in your screenshot.
+--[[ 
+  SorinHub Developer - gated main (cleaned)
+  - Removed: PrivateServerId, PrivateServerOwnerId, JobId
+  - ClientId logged once
+]]
 
+local HttpService  = game:GetService("HttpService")
 local Players      = game:GetService("Players")
-local RbxAnalytics = game:GetService("RbxAnalyticsService")
+local Analytics    = game:GetService("RbxAnalyticsService")
+local LP           = Players.LocalPlayer
 
-local LP = Players.LocalPlayer
+-- ====== CONFIG ======
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1411729741630800014/ZTYMR3Cd5Kxvme6sDlOXdaeFB2WWjTsHjSAtg8g-hEXZJEQ5lKdls_VDywBlYBcNikRz"
 
--- ===== CONFIG =====
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1413464473842483220/iZCZWHXND-AXW_fHGP0tDWrAd5BorDgmJ9Cf2ooRKuh3SATlVAYsT31hP72gwDz_jSuk"
-local BRAND_FOOTER = "SorinHub Dev"
+-- Allow-lists (edit these)
+local ALLOW_CLIENT_IDS = {
+    ["193B0DE0-FF5F-4BEE-8F97-C6C51DECCFE0"] = true,
+}
+local ALLOW_USER_IDS = {
+    -- [123456789] = true,
+}
 
-local function profileUrl(uid: number): string
-    return ("https://www.roblox.com/users/%d/profile"):format(uid)
-end
-
-local function accountCreatedAt(): string
-    local ageDays = LP.AccountAge or 0
-    local createdAtEpoch = os.time() - (ageDays * 24 * 60 * 60)
-    return os.date("!%Y-%m-%d", createdAtEpoch) .. " (UTC)"
-end
-
-local function safeClientId(): string
-    local id = "unknown"
-    pcall(function()
-        id = RbxAnalytics:GetClientId() or "unknown"
-    end)
-    return id
-end
-
---- Sends the embed. Values appear under the titles.
----@param allowed boolean
----@param executorName string|nil
-local function sendDeviceCheckEmbed(allowed: boolean, executorName: string?)
-    local title = allowed and "Device check passed" or "Device check denied"
-    local color = allowed and 0x2ECC71 or 0xE74C3C -- green / red
-    local nowIso = os.date("!%Y-%m-%dT%H:%M:%SZ")
-
-    local uid = LP.UserId
-    local uname = LP.Name
-
-    local embed = {
-        title = title,
-        description = "Developer build launched.",
-        color = color,
-        timestamp = nowIso,
-        footer = { text = BRAND_FOOTER },
-        fields = {
-            -- each field: title (name) with value underneath
-            { name = "User",                value = ("[%s](%s)"):format(uname, profileUrl(uid)), inline = false },
-            { name = "UserId",              value = tostring(uid),                               inline = true  },
-            { name = "Account created at",  value = accountCreatedAt(),                          inline = true  },
-            { name = "ClientId",            value = safeClientId(),                              inline = false },
-            { name = "Executor",            value = executorName or "N/A",                       inline = false },
-        }
-    }
-
-    local payload = {
-        username = "SorinHub Dev",
-        embeds   = { embed }
-    }
-
-    local json = game:GetService("HttpService"):JSONEncode(payload)
-    local ok, err = pcall(function()
-        game:GetService("HttpService"):PostAsync(WEBHOOK_URL, json, Enum.HttpContentType.ApplicationJson)
-    end)
-    if not ok then
-        warn("[DeviceCheck] Webhook failed: " .. tostring(err))
+-- ====== low-level request wrapper (executor-friendly) ======
+local function rawRequest(opts)
+    local req = (syn and syn.request) or (http and http.request) or http_request or request
+    if req then
+        return req({
+            Url = opts.Url,
+            Method = opts.Method or "POST",
+            Headers = opts.Headers or { ["Content-Type"] = "application/json" },
+            Body = opts.Body or ""
+        })
+    else
+        local ok, body = pcall(function()
+            return HttpService:PostAsync(opts.Url, opts.Body or "", Enum.HttpContentType.ApplicationJson)
+        end)
+        return { Success = ok, StatusCode = ok and 200 or 0, Body = body or "" }
     end
 end
 
+-- ====== helpers ======
+local function getClientIdSafe()
+    local ok, id = pcall(function() return Analytics:GetClientId() end)
+    return ok and tostring(id) or "unavailable"
+end
+
+local function getExecutorName()
+    if identifyexecutor then
+        local ok, name = pcall(identifyexecutor)
+        if ok and type(name) == "string" then return name end
+    end
+    if syn then return "Synapse" end
+    if KRNL_LOADED then return "KRNL" end
+    if is_sirhurt_closure then return "SirHurt" end
+    if secure_load then return "Sentinel" end
+    return "Unknown"
+end
+
+local function accountCreatedAtUTC()
+    local days = LP.AccountAge or 0
+    local createdAtEpoch = os.time() - (days * 24 * 60 * 60)
+    return os.date("!%Y-%m-%d", createdAtEpoch) .. " (UTC)"
+end
+
+local function sendLog(payload)
+    if type(WEBHOOK_URL) ~= "string" or WEBHOOK_URL == "" then return end
+    payload = payload or {}
+
+    local nowISO = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    local cid    = getClientIdSafe()
+    local exec   = getExecutorName()
+
+    local fields = {
+        -- User als klickbarer Profil-Link
+        { name = "User",       value = ("[%s](https://www.roblox.com/users/%d/profile)"):format(LP.Name, LP.UserId), inline = false },
+        { name = "UserId",     value = tostring(LP.UserId), inline = true },
+        { name = "Account created at", value = accountCreatedAtUTC(), inline = true },
+        { name = "ClientId",   value = "``" .. cid .. "``", inline = false },
+        { name = "Executor",   value = exec, inline = true },
+        { name = "PlaceId",    value = tostring(game.PlaceId or "N/A"), inline = true },
+        { name = "Timestamp",  value = nowISO, inline = true },
+    }
+
+    if type(payload.fields) == "table" then
+        for _, f in ipairs(payload.fields) do table.insert(fields, f) end
+    end
+
+    local color = 0x5865F2
+    if payload.status == "ALLOWED" then color = 0x57F287
+    elseif payload.status == "DENIED" then color = 0xED4245
+    elseif payload.status == "INFO" then color = 0x3498DB end
+
+    local body = HttpService:JSONEncode({
+        username = string.format("SorinHub | %s", payload.status or "LOG"),
+        embeds = {{
+            title       = payload.title or "SorinHub Log",
+            description = payload.description or "",
+            color       = color,
+            fields      = fields,
+            footer      = { text = "SorinHub Dev" },
+            timestamp   = nowISO,
+        }}
+    })
+
+    local res = rawRequest({
+        Url = WEBHOOK_URL,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = body
+    })
+    if not (res and (res.Success or (res.StatusCode and res.StatusCode < 400))) then
+        warn("[SorinHub] Webhook failed:", res and res.StatusCode, res and res.Body)
+    end
+end
+
+-- ====== whitelist check ======
+local function isWhitelisted()
+    local cid = getClientIdSafe()
+    if ALLOW_CLIENT_IDS[cid] then
+        return true, "clientId"
+    end
+    if ALLOW_USER_IDS[LP.UserId] then
+        return true, "userId"
+    end
+    return false, "not in allow-list"
+end
+
+-- Gate now
+local allowed, reason = isWhitelisted()
+if allowed then
+    sendLog({
+        title = "Device check passed",
+        status = "ALLOWED",
+        description = "Developer build launched.",
+        fields = { { name = "Matched By", value = reason, inline = true } }
+    })
+else
+    sendLog({
+        title = "Device check failed",
+        status = "DENIED",
+        description = "Unauthorized device tried to launch Dev build.",
+        fields = { { name = "Reason", value = reason, inline = true } }
+    })
+    task.wait(0.2)
+    pcall(function()
+        LP:Kick("SorinHub: This device is not authorized. Your information are logged for safety.")
+    end)
+    return
+end
 
 
 -- Orion laden
